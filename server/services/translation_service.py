@@ -2,51 +2,45 @@ import os
 from google.cloud import translate_v3 as translate
 
 
-def get_translate_client():
-  """
-  Create and return a Google Cloud Translation client.
-  Requires GOOGLE_APPLICATION_CREDENTIALS to be set to a JSON key file.
-  """
-  return translate.TranslationServiceClient()
+def get_client():
+    return translate.TranslationServiceClient()
 
 
 def translate_text(text: str, source: str, target: str):
-  """
-  Call Google Cloud Translation API to translate the given text.
-  """
-  project_id = os.getenv("GOOGLE_CLOUD_PROJECT")
-  location = "global"
+    """
+    Use Google Cloud Translation API v3 to translate text.
+    source: language code or 'auto'
+    target: language code, e.g. 'hi', 'en', 'fr'
+    """
+    project_id = os.getenv("GOOGLE_CLOUD_PROJECT")
+    if not project_id:
+        raise RuntimeError("GOOGLE_CLOUD_PROJECT is not set")
 
-  if not project_id:
-    raise RuntimeError("GOOGLE_CLOUD_PROJECT environment variable is not set")
+    parent = f"projects/{project_id}/locations/global"
+    client = get_client()
 
-  parent = f"projects/{project_id}/locations/{location}"
+    request = {
+      "parent": parent,
+      "contents": [text],
+      "mime_type": "text/plain",
+      "target_language_code": target,
+    }
 
-  client = get_translate_client()
+    if source != "auto":
+        request["source_language_code"] = source
 
-  # If source is "auto", omit source_language_code so API auto-detects.
-  request = {
-    "parent": parent,
-    "contents": [text],
-    "target_language_code": target,
-  }
+    response = client.translate_text(request=request)
 
-  if source != "auto":
-    request["source_language_code"] = source
+    translated_text = ""
+    detected_language = None
 
-  response = client.translate_text(request=request)
+    if response.translations:
+        translated_text = response.translations[0].translated_text
+        # v3 returns detected language info when auto-detect used
+        if source == "auto":
+            detected_language = response.translations[0].detected_language_code
 
-  translations = response.translations
-  translated_text = translations[0].translated_text if translations else ""
-
-  detected_language = None
-  if source == "auto" and response.glossary_translations == []:
-    # v3 response may include detected language codes
-    detected_language = response.contains_translation_glossary_config.language_code if hasattr(
-      response, "contains_translation_glossary_config"
-    ) else None
-
-  return {
-    "translated_text": translated_text,
-    "detected_language": detected_language,
-  }
+    return {
+        "translated_text": translated_text,
+        "detected_language": detected_language,
+    }
