@@ -27,10 +27,6 @@ function estimateReadingTime(text) {
   return `${minutes.toFixed(1)} min`;
 }
 
-function formatTimestamp(date) {
-  return date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
-}
-
 export default function Translator() {
   const [sourceLang, setSourceLang] = useState("auto");
   const [targetLang, setTargetLang] = useState("hi");
@@ -78,7 +74,7 @@ export default function Translator() {
         timestamp: now,
       };
 
-      setHistory((prev) => [entry, ...prev].slice(0, 10)); // keep latest 10
+      setHistory((prev) => [entry, ...prev].slice(0, 10));
     } catch (err) {
       setError("Unable to translate right now. Please try again.");
     } finally {
@@ -118,6 +114,9 @@ export default function Translator() {
     setSourceLang(entry.source);
     setTargetLang(entry.target);
   };
+
+  const formatTimestamp = (date) =>
+    date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100">
@@ -184,7 +183,7 @@ export default function Translator() {
             </div>
 
             <textarea
-              className="w-full h-40 md:h-52 resize-none rounded-xl bg-slate-950 border border-slate-800 px-3 py-3 text-sm text-slate-100 placeholder:text-slate-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+              className="w-full h-56 resize-none rounded-xl bg-slate-950 border border-slate-800 px-3 py-3 text-sm text-slate-100 placeholder:text-slate-500 focus:outline-none focus:ring-1 focus:ring-blue-500 overflow-y-auto"
               placeholder="Type or paste text to translate..."
               value={inputText}
               onChange={(e) => setInputText(e.target.value)}
@@ -244,7 +243,7 @@ export default function Translator() {
                 </div>
               </div>
 
-              <div className="flex-1 rounded-xl bg-slate-950 border border-slate-800 px-3 py-3 text-sm text-slate-100">
+              <div className="flex-1 rounded-xl bg-slate-950 border border-slate-800 px-3 py-3 text-sm text-slate-100 h-56 overflow-y-auto">
                 {outputText ? (
                   <p className="whitespace-pre-wrap">{outputText}</p>
                 ) : (
@@ -282,39 +281,34 @@ export default function Translator() {
                 </p>
               ) : (
                 <ul className="space-y-2 max-h-40 overflow-y-auto">
-                  {history.map((entry) => {
-                    const srcName =
-                      languages.find((l) => l.code === entry.source)?.name ||
-                      entry.source;
-                    const tgtName =
-                      languages.find((l) => l.code === entry.target)?.name ||
-                      entry.target;
-
-                    return (
-                      <li
-                        key={entry.id}
-                        className="flex items-start justify-between gap-3 text-[11px] text-slate-300 border-b border-slate-800/70 pb-2 last:border-b-0"
+                  {history.map((entry) => (
+                    <li
+                      key={entry.id}
+                      className="flex items-start justify-between gap-3 text-[11px] text-slate-300 border-b border-slate-800/70 pb-2 last:border-b-0"
+                    >
+                      <button
+                        className="text-left flex-1 hover:text-slate-100"
+                        onClick={() => handleHistoryClick(entry)}
                       >
-                        <button
-                          className="text-left flex-1 hover:text-slate-100"
-                          onClick={() => handleHistoryClick(entry)}
-                        >
-                          <p className="truncate">
-                            {entry.text}
-                          </p>
-                          <p className="text-slate-500 mt-0.5">
-                            {srcName} → {tgtName} • {formatTimestamp(entry.timestamp)}
-                          </p>
-                        </button>
-                        <button
-                          className="px-2 py-1 rounded-full border border-slate-700 hover:border-slate-500 text-[10px]"
-                          onClick={() => navigator.clipboard.writeText(entry.translated).catch(() => {})}
-                        >
-                          Copy
-                        </button>
-                      </li>
-                    );
-                  })}
+                        <p className="truncate">
+                          {entry.text}
+                        </p>
+                        <p className="text-slate-500 mt-0.5">
+                          {entry.source} → {entry.target} • {formatTimestamp(entry.timestamp)}
+                        </p>
+                      </button>
+                      <button
+                        className="px-2 py-1 rounded-full border border-slate-700 hover:border-slate-500 text-[10px]"
+                        onClick={() =>
+                          navigator.clipboard
+                            .writeText(entry.translated)
+                            .catch(() => {})
+                        }
+                      >
+                        Copy
+                      </button>
+                    </li>
+                  ))}
                 </ul>
               )}
             </div>

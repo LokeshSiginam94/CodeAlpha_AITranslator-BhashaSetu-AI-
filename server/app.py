@@ -2,6 +2,7 @@ from datetime import datetime, timezone
 from flask import Flask, request, jsonify
 from flask_cors import CORS
 from services.db import get_db
+from services.translation_service import translate_text as gcloud_translate
 
 app = Flask(__name__)
 CORS(app)
@@ -18,7 +19,8 @@ def health():
 @app.route("/translate", methods=["POST"])
 def translate():
     """
-    Translation endpoint (currently mock text) that also saves history to MongoDB.
+    Translation endpoint: tries Google Cloud Translation first,
+    logs real errors, falls back to mock text, and always saves history.
     """
     data = request.get_json() or {}
     text = data.get("text", "")
@@ -28,13 +30,27 @@ def translate():
     if not text:
         return jsonify({"error": "text is required"}), 400
 
-    translated_text = f"[backend mock translation {source}->{target}] {text}"
+    translated_text = ""
+    detected_language = None
+    confidence = 0.95
+
+    try:
+        result = gcloud_translate(text=text, source=source, target=target)
+        translated_text = result.get("translated_text") or ""
+        detected_language = result.get("detected_language")
+        if not translated_text:
+            raise RuntimeError("Empty translation from API")
+    except Exception as e:
+        print("Google Cloud Translation error:", e)
+        translated_text = f"[backend mock translation {source}->{target}] {text}"
+        confidence = 0.60
 
     doc = {
         "text": text,
         "translated": translated_text,
         "source": source,
         "target": target,
+        "detected_language": detected_language,
         "created_at": datetime.now(timezone.utc),
     }
 
@@ -49,17 +65,14 @@ def translate():
             "source": source,
             "target": target,
             "translated": translated_text,
-            "confidence": 0.92,
+            "detected_language": detected_language,
+            "confidence": confidence,
         }
     ), 200
 
 
 @app.route("/analytics", methods=["GET"])
 def analytics():
-    """
-    Basic usage analytics based on translations collection.
-    Returns totals and today's stats.
-    """
     now = datetime.now(timezone.utc)
     start_of_day = datetime(
         year=now.year,
@@ -117,16 +130,12 @@ def analytics():
 
 @app.route("/history", methods=["GET"])
 def history():
-    """
-    Return recent translations for History page.
-    Supports ?limit=N (default 20).
-    """
     try:
-        limit_param = request.args.get("limit", "20")
+        limit_param = request.args.get("limit", "50")
         try:
             limit = max(1, min(int(limit_param), 100))
         except ValueError:
-            limit = 20
+            limit = 50
 
         cursor = translations_collection.find(
             {},
@@ -136,6 +145,7 @@ def history():
                 "translated": 1,
                 "source": 1,
                 "target": 1,
+                "detected_language": 1,
                 "created_at": 1,
             },
         ).sort("created_at", -1).limit(limit)
@@ -154,6 +164,7 @@ def history():
                     "translated": doc.get("translated", ""),
                     "source": doc.get("source", ""),
                     "target": doc.get("target", ""),
+                    "detected_language": doc.get("detected_language"),
                     "created_at": created_iso,
                 }
             )
