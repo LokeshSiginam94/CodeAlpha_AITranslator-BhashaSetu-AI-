@@ -1,6 +1,7 @@
 import { useState } from "react";
 import Translator from "./pages/Translator";
 import Dashboard from "./pages/Dashboard";
+import History from "./pages/History";
 
 function App() {
   const [activePage, setActivePage] = useState("home");
@@ -132,19 +133,7 @@ function App() {
 
       {activePage === "dashboard" && <Dashboard />}
 
-      {activePage === "history" && (
-        <div className="min-h-screen bg-slate-950 text-slate-100">
-          <div className="max-w-6xl mx-auto px-4 py-8">
-            <h1 className="text-xl font-semibold tracking-tight mb-2">
-              History (coming soon)
-            </h1>
-            <p className="text-xs text-slate-400">
-              This page will later show searchable, filterable translation
-              history from MongoDB.
-            </p>
-          </div>
-        </div>
-      )}
+      {activePage === "history" && <History />}
     </div>
   );
 }

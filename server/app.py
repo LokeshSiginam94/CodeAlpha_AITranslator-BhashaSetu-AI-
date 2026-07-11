@@ -68,28 +68,23 @@ def analytics():
         tzinfo=timezone.utc,
     )
 
-    # total translations
     total_translations = translations_collection.count_documents({})
-
-    # translations today
     translations_today = translations_collection.count_documents(
         {"created_at": {"$gte": start_of_day}}
     )
 
-    # most used target language
-    pipeline = [
+    pipeline_target = [
         {"$group": {"_id": "$target", "count": {"$sum": 1}}},
         {"$sort": {"count": -1}},
         {"$limit": 1},
     ]
-    most_used_target_result = list(translations_collection.aggregate(pipeline))
+    most_used_target_result = list(translations_collection.aggregate(pipeline_target))
     most_used_target = (
         most_used_target_result[0]["_id"]
         if most_used_target_result
         else None
     )
 
-    # approximate words today (split by spaces)
     pipeline_words_today = [
         {"$match": {"created_at": {"$gte": start_of_day}}},
         {
@@ -118,6 +113,54 @@ def analytics():
             "words_today": int(words_today),
         }
     ), 200
+
+
+@app.route("/history", methods=["GET"])
+def history():
+    """
+    Return recent translations for History page.
+    Supports ?limit=N (default 20).
+    """
+    try:
+        limit_param = request.args.get("limit", "20")
+        try:
+            limit = max(1, min(int(limit_param), 100))
+        except ValueError:
+            limit = 20
+
+        cursor = translations_collection.find(
+            {},
+            {
+                "_id": 0,
+                "text": 1,
+                "translated": 1,
+                "source": 1,
+                "target": 1,
+                "created_at": 1,
+            },
+        ).sort("created_at", -1).limit(limit)
+
+        items = []
+        for doc in cursor:
+            created_at = doc.get("created_at")
+            if isinstance(created_at, datetime):
+                created_iso = created_at.isoformat()
+            else:
+                created_iso = str(created_at)
+
+            items.append(
+                {
+                    "text": doc.get("text", ""),
+                    "translated": doc.get("translated", ""),
+                    "source": doc.get("source", ""),
+                    "target": doc.get("target", ""),
+                    "created_at": created_iso,
+                }
+            )
+
+        return jsonify({"items": items}), 200
+    except Exception as e:
+        return jsonify({"error": "Failed to load history", "details": str(e)}), 500
 
 
 if __name__ == "__main__":
