@@ -1,46 +1,51 @@
-import os
-from google.cloud import translate_v3 as translate
+import requests
+
+MYMEMORY_BASE_URL = "https://api.mymemory.translated.net/get"
 
 
-def get_client():
-    return translate.TranslationServiceClient()
+def translate_text(text, source="auto", target="hi"):
+    if not text or not text.strip():
+        raise ValueError("Text is required for translation")
 
-
-def translate_text(text: str, source: str, target: str):
-    """
-    Use Google Cloud Translation API v3 to translate text.
-    source: language code or 'auto'
-    target: language code, e.g. 'hi', 'en', 'fr'
-    """
-    project_id = os.getenv("GOOGLE_CLOUD_PROJECT")
-    if not project_id:
-        raise RuntimeError("GOOGLE_CLOUD_PROJECT is not set")
-
-    parent = f"projects/{project_id}/locations/global"
-    client = get_client()
-
-    request = {
-      "parent": parent,
-      "contents": [text],
-      "mime_type": "text/plain",
-      "target_language_code": target,
+    langpair = f"{source}|{target}"
+    params = {
+        "q": text,
+        "langpair": langpair,
     }
 
-    if source != "auto":
-        request["source_language_code"] = source
+    response = requests.get(MYMEMORY_BASE_URL, params=params, timeout=15)
+    response.raise_for_status()
 
-    response = client.translate_text(request=request)
+    data = response.json()
 
-    translated_text = ""
+    if data.get("responseStatus") != 200:
+        raise RuntimeError(data.get("responseDetails", "Translation failed"))
+
+    response_data = data.get("responseData", {}) or {}
+    translated_text = response_data.get("translatedText", "").strip()
+
+    if not translated_text:
+        raise RuntimeError("Empty translated text from MyMemory")
+
+    matches = data.get("matches", []) or []
+
     detected_language = None
+    confidence = 0.90
 
-    if response.translations:
-        translated_text = response.translations[0].translated_text
-        # v3 returns detected language info when auto-detect used
-        if source == "auto":
-            detected_language = response.translations[0].detected_language_code
+    if source == "auto":
+        for match in matches:
+            segment = (match.get("segment") or "").strip().lower()
+            translation = (match.get("translation") or "").strip().lower()
+            if segment and translation:
+                detected_language = match.get("source")
+                break
+
+    match_score = response_data.get("match")
+    if isinstance(match_score, (int, float)):
+        confidence = round(float(match_score), 2)
 
     return {
         "translated_text": translated_text,
         "detected_language": detected_language,
+        "confidence": confidence,
     }

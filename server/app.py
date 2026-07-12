@@ -2,7 +2,7 @@ from datetime import datetime, timezone
 from flask import Flask, request, jsonify
 from flask_cors import CORS
 from services.db import get_db
-from services.translation_service import translate_text as gcloud_translate
+from services.translation_service import translate_text as api_translate
 
 app = Flask(__name__)
 CORS(app)
@@ -19,29 +19,37 @@ def health():
 @app.route("/translate", methods=["POST"])
 def translate():
     """
-    Translation endpoint: tries Google Cloud Translation first,
-    logs real errors, falls back to mock text, and always saves history.
+    Translation endpoint: uses MyMemory API, falls back gracefully if needed,
+    and always saves history.
     """
     data = request.get_json() or {}
-    text = data.get("text", "")
+    text = data.get("text", "").strip()
     source = data.get("source", "auto")
     target = data.get("target", "hi")
 
     if not text:
         return jsonify({"error": "text is required"}), 400
 
+    # Enforce max 500 characters for backend
+    max_chars = 500
+    if len(text) > max_chars:
+        text = text[:max_chars]
+
     translated_text = ""
     detected_language = None
-    confidence = 0.95
+    confidence = 0.90
 
     try:
-        result = gcloud_translate(text=text, source=source, target=target)
+        result = api_translate(text=text, source=source, target=target)
         translated_text = result.get("translated_text") or ""
         detected_language = result.get("detected_language")
+        confidence = result.get("confidence", confidence)
+
         if not translated_text:
             raise RuntimeError("Empty translation from API")
+
     except Exception as e:
-        print("Google Cloud Translation error:", e)
+        print("MyMemory Translation error, using mock:", e)
         translated_text = f"[backend mock translation {source}->{target}] {text}"
         confidence = 0.60
 
@@ -137,18 +145,22 @@ def history():
         except ValueError:
             limit = 50
 
-        cursor = translations_collection.find(
-            {},
-            {
-                "_id": 0,
-                "text": 1,
-                "translated": 1,
-                "source": 1,
-                "target": 1,
-                "detected_language": 1,
-                "created_at": 1,
-            },
-        ).sort("created_at", -1).limit(limit)
+        cursor = (
+            translations_collection.find(
+                {},
+                {
+                    "_id": 0,
+                    "text": 1,
+                    "translated": 1,
+                    "source": 1,
+                    "target": 1,
+                    "detected_language": 1,
+                    "created_at": 1,
+                },
+            )
+            .sort("created_at", -1)
+            .limit(limit)
+        )
 
         items = []
         for doc in cursor:
@@ -170,6 +182,7 @@ def history():
             )
 
         return jsonify({"items": items}), 200
+
     except Exception as e:
         return jsonify({"error": "Failed to load history", "details": str(e)}), 500
 

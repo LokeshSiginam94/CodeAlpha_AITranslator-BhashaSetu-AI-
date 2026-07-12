@@ -33,8 +33,8 @@ export default function History() {
     if (!search.trim()) return true;
     const term = search.toLowerCase();
     return (
-      item.text.toLowerCase().includes(term) ||
-      item.translated.toLowerCase().includes(term)
+      (item.text || "").toLowerCase().includes(term) ||
+      (item.translated || "").toLowerCase().includes(term)
     );
   });
 
@@ -76,9 +76,11 @@ export default function History() {
             <ul className="space-y-3 max-h-[480px] overflow-y-auto">
               {filteredItems.map((item, index) => {
                 const created = item.created_at || "";
+                const source = item.source || "auto";
+                const target = item.target || "-";
                 return (
                   <li
-                    key={`${item.created_at}-${index}`}
+                    key={`${created}-${index}`}
                     className="border-b border-slate-800/70 pb-3 last:border-b-0"
                   >
                     <p className="text-xs text-slate-300 mb-1">
@@ -89,7 +91,7 @@ export default function History() {
                     </p>
                     <div className="flex items-center justify-between text-[11px] text-slate-500">
                       <span>
-                        {item.source || "auto"} → {item.target || "-"}
+                        {source} → {target}
                       </span>
                       <span>{created}</span>
                     </div>
@@ -98,7 +100,7 @@ export default function History() {
                         className="px-2 py-1 rounded-full border border-slate-700 hover:border-slate-500 text-[10px]"
                         onClick={() =>
                           navigator.clipboard
-                            .writeText(item.translated)
+                            .writeText(item.translated || "")
                             .catch(() => {})
                         }
                       >
